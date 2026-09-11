@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YOLO Vision — Object Localization</title>
+<style>
+:root{
+  --bg:#f5f5f7;
+  --card:#ffffff;
+  --text:#1d1d1f;
+  --secondary:#6e6e73;
+  --accent:#0071e3;
+  --accent-press:#0068d1;
+  --border:#e5e5ea;
+  --radius:20px;
+  --radius-sm:14px;
+  --shadow:0 4px 24px rgba(0,0,0,.06);
+  --shadow-sm:0 1px 6px rgba(0,0,0,.05);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",sans-serif;
+  background:var(--bg);color:var(--text);
+  -webkit-font-smoothing:antialiased;
+}
+/* ---------- header ---------- */
+.site-header{
+  position:sticky;top:0;z-index:20;
+  background:rgba(255,255,255,.8);
+  -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+}
+.header-inner{max-width:1120px;margin:0 auto;padding:12px 24px;display:flex;align-items:center}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-mark{width:32px;height:32px;border-radius:9px;background:var(--text);position:relative;flex:none}
+.brand-mark::after{content:"";position:absolute;left:8px;top:8px;width:16px;height:16px;border:2px solid #fff;border-radius:4px}
+.brand strong{display:block;font-size:15px;font-weight:600;letter-spacing:-.01em}
+.brand small{display:block;font-size:12px;color:var(--secondary);font-weight:400}
+/* ---------- layout ---------- */
+.container{max-width:1120px;margin:0 auto;padding:0 24px 64px}
+.hero{text-align:center;padding:36px 16px 8px}
+.hero h1{font-size:clamp(26px,4.5vw,38px);font-weight:700;letter-spacing:-.02em}
+.subtitle{color:var(--secondary);font-size:15px;margin-top:10px;line-height:1.5}
+/* ---------- cards ---------- */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px;margin-top:20px}
+/* ---------- STATE: big dropzone (initial) ---------- */
+.dropzone{
+  border:1.5px dashed #c7c7cc;border-radius:var(--radius-sm);
+  padding:44px 24px;text-align:center;cursor:pointer;
+  transition:border-color .25s ease,background .25s ease,transform .25s ease;
+  background:#fafafc;
+}
+.dropzone:hover{border-color:var(--accent);background:#f2f8ff}
+.dropzone.dragover{border-color:var(--accent);background:#e8f2fe;transform:scale(1.01)}
+.dropzone.dragover .dz-title{color:var(--accent)}
+.dz-icon{
+  width:48px;height:48px;margin:0 auto 14px;border-radius:50%;
+  background:#eef0f3;display:flex;align-items:center;justify-content:center;
+  font-size:20px;color:var(--text);
+}
+.dz-title{font-size:17px;font-weight:600}
+.dz-sub{color:var(--secondary);font-size:14px;margin-top:6px}
+.dz-sub .link{color:var(--accent);font-weight:500}
+.dz-formats{color:var(--secondary);font-size:12px;margin-top:12px;letter-spacing:.08em}
+/* ---------- STATE: compact file bar (uploaded) ---------- */
+.filebar{display:flex;align-items:center;gap:12px}
+.filebar-thumb{width:52px;height:52px;flex:none;border-radius:12px;border:1px solid var(--border);background:#f2f2f5;overflow:hidden}
+.filebar-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.filebar-info{flex:1;min-width:0}
+.filebar-info p:first-child{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filebar-info p:last-child{font-size:12px;color:var(--secondary);margin-top:2px}
+/* ---------- preview (compact) ---------- */
+.preview{margin-top:16px}
+.preview-img-wrap{position:relative;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);background:#111}
+.preview-img-wrap img{display:block;width:100%;max-height:360px;object-fit:contain}
+.preview-actions{display:flex;gap:10px;margin-top:14px}
+.preview-actions .btn-primary{margin-top:0;flex:1}
+/* ---------- analyzing overlay: ONLY visible during submit ---------- */
+.scan-overlay{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+  background:rgba(0,0,0,.45);padding-bottom:26px;gap:10px;
+}
+.scan-line{
+  position:absolute;left:6%;right:6%;top:0;height:3px;border-radius:3px;
+  background:#fff;box-shadow:0 0 18px 3px rgba(255,255,255,.8);
+  animation:scan 1.8s ease-in-out infinite;
+}
+@keyframes scan{0%{top:4%}50%{top:94%}100%{top:4%}}
+.scan-text{color:#fff;font-size:14px;font-weight:600}
+.scan-pct{color:#fff;font-size:26px;font-weight:700;letter-spacing:-.01em}
+.scan-sub{color:rgba(255,255,255,.75);font-size:12px}
+.scan-overlay.done .scan-line{display:none}
+/* Progress bar murni indikator visual (indeterminate → dikendalikan JS 0–100). */
+.progress{width:70%;max-width:280px;height:6px;border-radius:6px;background:rgba(255,255,255,.22);overflow:hidden}
+.progress-bar{
+  display:block;height:100%;width:0%;border-radius:6px;
+  background:#fff;box-shadow:0 0 10px rgba(255,255,255,.7);
+  transition:width .2s ease;
+}
+/* ---------- buttons ---------- */
+.btn-primary{
+  width:100%;margin-top:16px;padding:14px;border:0;border-radius:var(--radius-sm);
+  background:var(--accent);color:#fff;font-size:16px;font-weight:600;font-family:inherit;
+  cursor:pointer;transition:background .2s ease,transform .15s ease,opacity .2s ease;
+}
+.btn-primary:hover:not(:disabled){background:var(--accent-press)}
+.btn-primary:active:not(:disabled){transform:scale(.99)}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.btn-secondary{
+  width:100%;margin-top:16px;padding:14px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:#fff;font-size:15px;font-weight:600;font-family:inherit;color:var(--text);cursor:pointer;
+  transition:background .2s ease;
+}
+.btn-secondary:hover{background:#f2f2f5}
+.btn-ghost{
+  flex:none;padding:9px 16px;border-radius:10px;border:1px solid var(--border);
+  background:#fff;font-size:13px;font-weight:500;font-family:inherit;color:var(--text);cursor:pointer;
+  transition:background .2s ease;
+}
+.btn-ghost:hover{background:#f2f2f5}
+button:focus-visible,.dropzone:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.error{background:#fdecec;color:#a00000;padding:12px 16px;border-radius:12px;font-size:14px;margin-top:16px}
+/* ---------- results: compact 2-column ---------- */
+.results{padding-top:32px;scroll-margin-top:72px}
+.results h2{font-size:clamp(22px,3.5vw,28px);font-weight:700;letter-spacing:-.01em;text-align:center}
+.results>.subtitle{text-align:center}
+.result-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;margin-top:16px;align-items:start}
+.result-img-card{overflow:hidden;padding:10px;margin-top:0}
+.result-img-card img{display:block;width:100%;max-height:600px;object-fit:contain;border-radius:12px;background:#111}
+.side{display:flex;flex-direction:column;gap:16px;min-width:0}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-sm);padding:14px 8px;text-align:center}
+.stat .v{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.stat .k{font-size:11px;color:var(--secondary);font-weight:500;letter-spacing:.03em;text-transform:uppercase;margin-top:4px}
+/* ---------- compact object list with internal scroll ---------- */
+.objects-panel{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px}
+.objects-panel h3{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--secondary);margin-bottom:10px}
+.obj-scroll{max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:4px}
+.obj-scroll::-webkit-scrollbar{width:8px}
+.obj-scroll::-webkit-scrollbar-track{background:transparent}
+.obj-scroll::-webkit-scrollbar-thumb{background:#d1d1d6;border-radius:8px}
+.obj-scroll::-webkit-scrollbar-thumb:hover{background:#b0b0b8}
+.obj-row{border:1px solid var(--border);border-radius:12px;padding:8px 12px;min-height:52px;background:#fff}
+.obj-top{display:flex;align-items:center;gap:10px}
+.obj-num{flex:none;font-size:12px;font-weight:700;color:var(--secondary);width:22px}
+.obj-name{flex:1;min-width:0;font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.obj-conf{flex:none;font-size:14px;font-weight:700;color:var(--accent)}
+.obj-coords{margin-top:6px}
+.obj-coords summary{font-size:12px;color:var(--secondary);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px}
+.obj-coords summary::before{content:"+";font-weight:700}
+.obj-coords[open] summary::before{content:"–"}
+.obj-coords summary::-webkit-details-marker{display:none}
+.coord-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.coord-grid>div{background:#f5f5f7;border-radius:8px;padding:10px;font-size:12px;line-height:1.8}
+.coord-grid strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--secondary)}
+.empty{text-align:center;color:var(--secondary);padding:8px 0 4px;font-size:14px}
+/* ---------- toast ---------- */
+.toast-wrap{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:100;display:flex;flex-direction:column;gap:8px;align-items:center;width:max-content;max-width:calc(100vw - 48px)}
+.toast{
+  background:#1d1d1f;color:#fff;font-size:14px;font-weight:500;
+  padding:12px 20px;border-radius:999px;box-shadow:0 8px 28px rgba(0,0,0,.25);
+  opacity:0;transform:translateY(12px);transition:opacity .3s ease,transform .3s ease;
+  max-width:100%;text-align:center;
+}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.error{background:#b3261e}
+/* ---------- STATE RESULT: upload hilang, fokus hanya pada hasil ---------- */
+.is-result #uploadCard{display:none}
+.is-result .hero{padding:24px 16px 4px}
+.is-result .hero h1{font-size:clamp(22px,3.5vw,28px)}
+/* ---------- feedback ringan saat upload (BUKAN scanning) ---------- */
+.ready-badge{
+  display:inline-flex;align-items:center;gap:6px;margin-top:6px;
+  font-size:12px;font-weight:600;color:#1a7f37;
+  background:#e6f6ea;border:1px solid #bfe6c9;border-radius:999px;padding:4px 12px;
+}
+.ready-badge[hidden]{display:none}
+.ready-badge.pop{animation:pop .35s ease both}
+@keyframes pop{0%{opacity:0;transform:scale(.85)}100%{opacity:1;transform:scale(1)}}
+.img-fade{animation:imgIn .45s ease both}
+@keyframes imgIn{0%{opacity:0;transform:scale(.985)}100%{opacity:1;transform:scale(1)}}
+/* ---------- reveal hasil: image dulu, lalu summary + list stagger ---------- */
+@keyframes rise{0%{opacity:0;transform:translateY(16px) scale(.995)}100%{opacity:1;transform:none}}
+body.is-result .result-img-card{animation:rise .55s ease both}
+body.is-result .stat{animation:rise .5s ease both}
+body.is-result .stat:nth-child(2){animation-delay:.12s}
+body.is-result .stat:nth-child(3){animation-delay:.2s}
+body.is-result .objects-panel{animation:rise .5s ease .24s both}
+body.is-result .obj-row{animation:rise .45s ease both;animation-delay:.3s}
+body.is-result #againBtn{animation:rise .5s ease .35s both}
+/* ---------- responsive ---------- */
+@media(max-width:860px){
+  .result-grid{grid-template-columns:1fr}
+  .result-img-card img{max-height:420px}
+}
+@media(max-width:640px){
+  .container{padding:0 16px 56px}
+  .hero{padding:28px 8px 4px}
+  .card{padding:18px}
+  .dropzone{padding:32px 16px}
+  .preview-img-wrap img{max-height:280px}
+  .preview-actions{flex-direction:column}
+  .preview-actions .btn-ghost{width:100%;padding:13px}
+  .summary{grid-template-columns:repeat(3,1fr);gap:8px}
+  .stat{padding:12px 4px}
+  .stat .v{font-size:18px}
+  .stat .k{font-size:10px}
+  .coord-grid{grid-template-columns:1fr}
+  .filebar-thumb{width:44px;height:44px}
+}
+</style>
+</head>
+<body data-has-results="{{ '1' if image_url else '' }}" data-has-error="{{ '1' if error else '' }}" class="{{ 'is-result' if image_url else '' }}">
+
+<div class="toast-wrap" id="toastWrap" aria-live="polite" role="status"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div><strong>Object Localization</strong><small>YOLO Vision</small></div>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="hero">
+    <h1>Detect Objects in Your Image</h1>
+    <p class="subtitle">Upload an image to analyze objects and their locations.</p>
+  </section>
+
+  <!-- STATE: INITIAL (dropzone) / UPLOADED (compact file bar + preview) -->
+  <section class="card" id="uploadCard" aria-label="Upload image">
+    <form id="uploadForm" method="POST" enctype="multipart/form-data">
+      <div id="dropzoneLarge" class="dropzone" role="button" tabindex="0" aria-label="Upload image — click or drop a file here">
+        <div class="dz-icon" aria-hidden="true">&#8593;</div>
+        <p class="dz-title" id="dzTitle">Drop your image here</p>
+        <p class="dz-sub">or <span class="link">click to browse</span></p>
+        <p class="dz-formats">JPG &bull; PNG &bull; WEBP</p>
+      </div>
+      <input type="file" id="fileInput" name="file" accept=".jpg,.jpeg,.png,.webp" hidden aria-label="Choose an image file">
+      <div id="fileBar" class="filebar" hidden>
+        <div class="filebar-thumb" id="thumbSlot" aria-hidden="true"></div>
+        <div class="filebar-info">
+          <p id="fileName"></p>
+          <p id="fileSize"></p>
+          <span id="readyBadge" class="ready-badge" hidden>&#10003; Ready to analyze</span>
+        </div>
+        <button type="button" id="addBtn" class="btn-ghost">+ Add Image</button>
+      </div>
+      <div id="previewWrap" class="preview" hidden>
+        <div class="preview-img-wrap" id="previewSlot">
+          <div id="scanOverlay" class="scan-overlay" hidden>
+            <div class="scan-line" aria-hidden="true"></div>
+            <p class="scan-text" id="scanText">Analyzing image&hellip;</p>
+            <p class="scan-pct" id="scanPct">0%</p>
+            <div class="progress" id="scanProgress" role="progressbar" aria-label="Image analysis progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="progress-bar" id="scanBar"></span></div>
+            <p class="scan-sub">Processing image, please wait...</p>
+          </div>
+        </div>
+        <div class="preview-actions">
+          <button type="button" id="removeBtn" class="btn-ghost">Remove</button>
+          <button type="submit" id="analyzeBtn" class="btn-primary">Analyze Image</button>
+        </div>
+      </div>
+    </form>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  </section>
+
+  {% if image_url %}
+  <!-- STATE: RESULT -->
+  <section id="results" class="results" aria-label="Detection results">
+    <h2>Detection Results</h2>
+    <p class="subtitle">Objects detected in your image</p>
+    <div class="result-grid">
+      <div class="card result-img-card">
+        <img src="{{ image_url }}" alt="Image with detection bounding boxes">
+      </div>
+      <div class="side">
+        {% if detections %}
+        {% set sorted_det = detections|sort(attribute='confidence', reverse=true) %}
+        {% set ns = namespace(total=0, sum=0.0, highest=0.0) %}
+        {% for d in detections %}{% set ns.total = ns.total + 1 %}{% set ns.sum = ns.sum + d.confidence %}{% if d.confidence > ns.highest %}{% set ns.highest = d.confidence %}{% endif %}{% endfor %}
+        <div class="summary">
+          <div class="stat"><p class="v">{{ ns.total }}</p><p class="k">Objects Detected</p></div>
+          <div class="stat"><p class="v">{{ "%.1f"|format(ns.highest) }}%</p><p class="k">Highest Confidence</p></div>
+          <div class="stat"><p class="v">{{ "%.1f"|format(ns.sum / ns.total) }}%</p><p class="k">Average Confidence</p></div>
+        </div>
+        <div class="objects-panel">
+          <h3>Objects</h3>
+          <div class="obj-scroll">
+            {% for item in sorted_det %}
+            <div class="obj-row">
+              <div class="obj-top">
+                <span class="obj-num">{{ "%02d"|format(loop.index) }}</span>
+                <span class="obj-name">{{ item.name }}</span>
+                <span class="obj-conf">{{ "%.2f"|format(item.confidence) }}%</span>
+              </div>
+              <details class="obj-coords">
+                <summary>View coordinates</summary>
+                <div class="coord-grid">
+                  <div><strong>Pixel</strong><br>
+                    x1={{ "%.1f"|format(item.box[0]) }}<br>
+                    y1={{ "%.1f"|format(item.box[1]) }}<br>
+                    x2={{ "%.1f"|format(item.box[2]) }}<br>
+                    y2={{ "%.1f"|format(item.box[3]) }}
+                  </div>
+                  <div><strong>Normalized</strong><br>
+                    x1={{ "%.4f"|format(item.box_norm[0]) }}<br>
+                    y1={{ "%.4f"|format(item.box_norm[1]) }}<br>
+                    x2={{ "%.4f"|format(item.box_norm[2]) }}<br>
+                    y2={{ "%.4f"|format(item.box_norm[3]) }}
+                  </div>
+                </div>
+              </details>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% else %}
+        <div class="card"><p class="empty">Tidak ada objek yang terdeteksi.</p></div>
+        {% endif %}
+      </div>
+    </div>
+    <button type="button" id="againBtn" class="btn-secondary">Analyze Another Image</button>
+  </section>
+  {% endif %}
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+  // STATE: INITIAL | UPLOADED | ANALYZING | RESULT | RESET
+  var state = 'INITIAL';
+  var dropzoneLarge = document.getElementById('dropzoneLarge');
+  var fileInput = document.getElementById('fileInput');
+  var form = document.getElementById('uploadForm');
+  var fileBar = document.getElementById('fileBar');
+  var thumbSlot = document.getElementById('thumbSlot');
+  var previewWrap = document.getElementById('previewWrap');
+  var previewSlot = document.getElementById('previewSlot');
+  var readyBadge = document.getElementById('readyBadge');
+  var fileName = document.getElementById('fileName');
+  var fileSize = document.getElementById('fileSize');
+  var addBtn = document.getElementById('addBtn');
+  var analyzeBtn = document.getElementById('analyzeBtn');
+  var removeBtn = document.getElementById('removeBtn');
+  var scanOverlay = document.getElementById('scanOverlay');
+  var scanText = document.getElementById('scanText');
+  var scanPct = document.getElementById('scanPct');
+  var scanBar = document.getElementById('scanBar');
+  var scanProgress = document.getElementById('scanProgress');
+  var dzTitle = document.getElementById('dzTitle');
+  var toastWrap = document.getElementById('toastWrap');
+  var results = document.getElementById('results');
+  var againBtn = document.getElementById('againBtn');
+  var ALLOWED = ['jpg', 'jpeg', 'png', 'webp'];
+
+  function setState(s){ state = s; }
+
+  function showToast(msg, type){
+    var el = document.createElement('div');
+    el.className = 'toast ' + (type || 'success');
+    el.textContent = msg;
+    toastWrap.appendChild(el);
+    requestAnimationFrame(function(){ el.classList.add('show'); });
+    setTimeout(function(){
+      el.classList.remove('show');
+      setTimeout(function(){ el.remove(); }, 350);
+    }, 3500);
+  }
+
+  function formatSize(bytes){
+    if(bytes < 1024) return bytes + ' B';
+    if(bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function extOf(name){
+    var i = name.lastIndexOf('.');
+    return i >= 0 ? name.slice(i + 1).toLowerCase() : '';
+  }
+
+  function revoke(url){
+    if(url && url.indexOf('blob:') === 0){ try { URL.revokeObjectURL(url); } catch(e) {} }
+  }
+
+  // Tidak ada elemen gambar kosong di DOM: elemen dibuat hanya saat file dipilih,
+  // dan dihapus lagi saat reset — mencegah broken image & ruang kosong.
+  function clearImages(){
+    var olds = previewSlot.querySelectorAll('img');
+    for(var k = 0; k < olds.length; k++){ revoke(olds[k].src); olds[k].remove(); }
+    thumbSlot.innerHTML = '';
+  }
+
+  function makeImg(url, alt){
+    var im = document.createElement('img');
+    im.src = url;
+    im.alt = alt;
+    im.className = 'img-fade';
+    return im;
+  }
+
+  // UPLOADED: compact file bar + preview + feedback ringan (fade/scale + badge).
+  // NO scanning di sini.
+  function handleFile(file){
+    if(!file) return;
+    if(ALLOWED.indexOf(extOf(file.name)) < 0){
+      showToast('Only JPG, JPEG, PNG or WEBP images are supported.', 'error');
+      return;
+    }
+    var url = URL.createObjectURL(file);
+    clearImages();
+    previewSlot.insertBefore(makeImg(url, 'Image preview'), scanOverlay);
+    var th = makeImg(url, 'Selected image thumbnail');
+    th.classList.remove('img-fade');
+    thumbSlot.appendChild(th);
+    fileName.textContent = file.name;
+    fileSize.textContent = formatSize(file.size);
+    readyBadge.hidden = false;
+    readyBadge.classList.remove('pop');
+    void readyBadge.offsetWidth;
+    readyBadge.classList.add('pop');
+    dropzoneLarge.hidden = true;
+    fileBar.hidden = false;
+    previewWrap.hidden = false;
+    setState('UPLOADED');
+    showToast('Image ready to analyze', 'success');
+  }
+
+  // RESET: back to INITIAL upload state — bersih, tanpa sisa gambar/animasi.
+  function resetAll(){
+    stopProgressTimer();
+    scanOverlay.classList.remove('done');
+    clearImages();
+    fileInput.value = '';
+    readyBadge.hidden = true;
+    readyBadge.classList.remove('pop');
+    dropzoneLarge.hidden = false;
+    fileBar.hidden = true;
+    previewWrap.hidden = true;
+    scanOverlay.hidden = true;
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = 'Analyze Image';
+    dzTitle.textContent = 'Drop your image here';
+    setState('INITIAL');
+  }
+
+  // RESULT -> RESET without reload: hide results, restore upload state.
+  function analyzeAnother(){
+    if(results) results.hidden = true;
+    document.body.classList.remove('is-result');
+    resetAll();
+    var card = document.getElementById('uploadCard');
+    if(card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  dropzoneLarge.addEventListener('click', function(){ fileInput.click(); });
+  dropzoneLarge.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); fileInput.click(); }
+  });
+  fileInput.addEventListener('change', function(){
+    if(fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+  addBtn.addEventListener('click', function(){ fileInput.click(); });
+  removeBtn.addEventListener('click', resetAll);
+  if(againBtn) againBtn.addEventListener('click', analyzeAnother);
+
+  ['dragenter', 'dragover'].forEach(function(evt){
+    dropzoneLarge.addEventListener(evt, function(e){
+      e.preventDefault();
+      dropzoneLarge.classList.add('dragover');
+      dzTitle.textContent = 'Drop image here';
+    });
+  });
+  dropzoneLarge.addEventListener('dragleave', function(e){
+    e.preventDefault();
+    dropzoneLarge.classList.remove('dragover');
+    dzTitle.textContent = 'Drop your image here';
+  });
+  dropzoneLarge.addEventListener('drop', function(e){
+    e.preventDefault();
+    dropzoneLarge.classList.remove('dragover');
+    dzTitle.textContent = 'Drop your image here';
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if(!f) return;
+    try { fileInput.files = e.dataTransfer.files; } catch(err) {}
+    handleFile(f);
+  });
+
+  // ANALYZING: scanning + SATU progress bar + % muncul ONLY di sini, saat Analyze diklik.
+  // Progress 0→95% (simulasi, capped) selama request berjalan,
+  // 100% HANYA setelah response Flask benar-benar diterima.
+  var progressTimer = null;
+
+  function setProgress(p){
+    p = Math.max(0, Math.min(100, Math.round(p)));
+    scanPct.textContent = p + '%';
+    scanBar.style.width = p + '%';
+    scanProgress.setAttribute('aria-valuenow', String(p));
+  }
+
+  function stopProgressTimer(){
+    if(progressTimer){ clearInterval(progressTimer); progressTimer = null; }
+  }
+
+  function startAnalyzing(){
+    setState('ANALYZING');
+    scanOverlay.classList.remove('done');
+    scanText.innerHTML = 'Analyzing image&hellip;';
+    scanOverlay.hidden = false;
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = 'Analyzing…';
+    showToast('AI is analyzing...', 'success');
+    var p = 0;
+    setProgress(0);
+    progressTimer = setInterval(function(){
+      p += (95 - p) * 0.07 + Math.random() * 2.5;
+      if(p > 95) p = 95;
+      setProgress(p);
+    }, 200);
+    var data = new FormData(form);
+    fetch('/', { method: 'POST', body: data }).then(function(resp){
+      return resp.text().then(function(html){ return { ok: resp.ok, html: html }; });
+    }).then(function(out){
+      stopProgressTimer();
+      if(!out.ok) throw new Error('bad response');
+      finishAnalyzing(out.html);
+    }).catch(function(){
+      stopProgressTimer();
+      scanOverlay.hidden = true;
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = 'Analyze Image';
+      setState('UPLOADED');
+      showToast('Unable to process this image.', 'error');
+    });
+  }
+
+  // Response diterima: kunci 100%, matikan scanning, lalu tampilkan hasil.
+  function finishAnalyzing(html){
+    setProgress(100);
+    scanOverlay.classList.add('done');
+    scanText.textContent = 'Detection completed';
+    setTimeout(function(){
+      document.open();
+      document.write(html);
+      document.close();
+    }, 650);
+  }
+
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    if(state === 'ANALYZING' || state === 'RESULT') return;
+    if(!fileInput.files || !fileInput.files[0]){
+      showToast('Please choose an image first.', 'error');
+      return;
+    }
+    if(!window.fetch || !window.FormData){ form.submit(); return; }
+    startAnalyzing();
+    // POST tetap ke Flask "/" — backend tidak berubah.
+  });
+
+  document.addEventListener('DOMContentLoaded', function(){
+    // INITIAL: overlay is hidden in markup; enforce it.
+    scanOverlay.hidden = true;
+    var hasResults = document.body.getAttribute('data-has-results') === '1';
+    var hasError = document.body.getAttribute('data-has-error') === '1';
+    if(hasResults){
+      setState('RESULT');
+      // Stagger per-row via JS (nilai delay polos, aman untuk CSS parser).
+      var rows = document.querySelectorAll('#results .obj-row');
+      for(var i = 0; i < rows.length; i++){
+        rows[i].style.animationDelay = (300 + Math.min(i, 14) * 40) + 'ms';
+      }
+      showToast('Detection completed successfully', 'success');
+      setTimeout(function(){
+        if(results && results.scrollIntoView) results.scrollIntoView({ behavior: 'smooth' });
+      }, 450);
+    } else if(hasError){
+      showToast('Unable to process this image.', 'error');
+    } else {
+      setState('INITIAL');
+    }
+  });
+})();
+</script>
+</body>
+</html>
